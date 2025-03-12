@@ -1,15 +1,26 @@
 // generated on 2016-05-08 using generator-chrome-extension 0.5.6
 import gulp from 'gulp';
-import gulpLoadPlugins from 'gulp-load-plugins';
 import del from 'del';
-import {stream as wiredep} from 'wiredep';
-
-const $ = gulpLoadPlugins();
+import wiredep from 'wiredep';
+import eslint from 'gulp-eslint-new';
+import imagemin from 'gulp-imagemin';
+import cleanCss from 'gulp-clean-css';
+import sourcemaps from 'gulp-sourcemaps';
+import removeLogging from 'gulp-remove-logging';
+import htmlmin from 'gulp-htmlmin';
+import zip from 'gulp-zip';
+import livereload from 'gulp-livereload';
+import gulpIf from 'gulp-if';
+import useref from 'gulp-useref';
+import cache from 'gulp-cache';
+import size from 'gulp-size';
 
 function extras(cb) {
   return gulp.src([
     'app/*.*',
     'app/_locales/**',
+    'app/scripts/**/*.js',  // Ensure JS files are copied
+    'app/vendor/scripts/**/*',  // Copy jQuery and moment.js
     '!app/*.json',
     '!app/*.html',
   ], {
@@ -20,17 +31,13 @@ function extras(cb) {
 
 export function lint(cb) {
   return gulp.src('app/scripts/**/*.js')
-    .pipe($.eslint({
-      env: {
-        es6:false
-      }
-    }))
-    .pipe($.eslint.format());
+    .pipe(eslint()) // No need to pass config, it will use eslint.config.mjs
+    .pipe(eslint.format());
 }
 
 export function images(cb) {
   return gulp.src('app/images/**/*')
-    .pipe($.if($.if.isFile, $.cache($.imagemin({
+    .pipe(gulpIf(imagemin.isFile, cache(imagemin({
       progressive: true,
       interlaced: true,
       // don't remove IDs from SVGs, they are often used
@@ -46,16 +53,16 @@ export function images(cb) {
 
 function html(cb) {
   return gulp.src('app/*.html')
-    .pipe($.useref({searchPath: ['.tmp', 'app', '.']}))
-    .pipe($.sourcemaps.init())
-    .pipe($.if(/^((?!(\.min)).)*\.js$/, $.removeLogging({methods:['log']})))
-    .pipe($.if(/^((?!(\.min)).)*\.js$/, $.uglify()))
-    .pipe($.if('*.css', $.cleanCss({compatibility: '*'})))
-    .pipe($.sourcemaps.write())
-    .pipe($.if('*.html', $.htmlmin({removeComments: true, collapseWhitespace: true})))
+    .pipe(useref({ searchPath: ['.tmp', 'app', '.'] }))
+    .pipe(sourcemaps.init())
+    .pipe(gulpIf(/^((?!(\.min)).)*\.js$/, removeLogging({ methods: ['log'] })))
+    .pipe(gulpIf(/^((?!(\.min)).)*\.js$/, htmlmin({ removeComments: true, collapseWhitespace: true })))
+    .pipe(gulpIf('*.css', cleanCss({ compatibility: '*' })))
+    .pipe(sourcemaps.write())
     .pipe(gulp.dest('dist'));
 }
 
+/*
 function chromeManifest(cb) {
   var cwd = process.cwd();
   return $.merge(gulp.src('app/manifest.json')
@@ -68,13 +75,14 @@ function chromeManifest(cb) {
         ]
       }
   })), gulp.src('app/scripts/options.js', {base:'app/'}))
-  .pipe($.if('*.css', $.cleanCss({compatibility: '*'})))
+  .pipe($.if('*.css', cleanCss({compatibility: '*'})))
   .pipe($.if(/^((?!(\.min)).)*\.js$/, $.removeLogging({methods:['log']})))
-  .pipe($.if(/^((?!(\.min)).)*\.js$/, $.sourcemaps.init()))
+  .pipe($.if(/^((?!(\.min)).)*\.js$/, sourcemaps.init()))
   .pipe($.if(/^((?!(\.min)).)*\.js$/, $.uglify()))
-  .pipe($.if(/^((?!(\.min)).)*\.js$/, $.sourcemaps.write('.')))
-  .pipe(gulp.dest('dist', {cwd: cwd}));  
+  .pipe($.if(/^((?!(\.min)).)*\.js$/, sourcemaps.write('.')))
+  .pipe(gulp.dest('dist', {cwd: cwd}));
 }
+*/
 
 export function clean(cb) {
   del(['.tmp', 'dist']);
@@ -82,7 +90,7 @@ export function clean(cb) {
 }
 
 function watchFiles() {
-  $.livereload.listen();
+  livereload.listen();
   gulp.watch('app/scripts/**/*.js', lint);
   gulp.watch([
     'app/*.html',
@@ -90,13 +98,13 @@ function watchFiles() {
     'app/images/**/*',
     'app/styles/**/*',
     'app/_locales/**/*.json'
-  ], $.livereload.reload);
+  ], livereload.reload);
   // gulp.watch('bower.json', wiredepInit); // Deprecated now...
 }
 export const watch = gulp.series(lint, html, watchFiles);
 
-function size() {
-  return gulp.src('dist/**/*').pipe($.size({title: 'build', gzip: true}));
+function sizeTask() {
+  return gulp.src('dist/**/*').pipe(size({title: 'build', gzip: true}));
 }
 
 function wiredepInit(cb) {
@@ -111,14 +119,14 @@ function wiredepInit(cb) {
 export function dist() {
   var manifest = require('./dist/manifest.json');
   return gulp.src('dist/**')
-      .pipe($.zip('PT-' + manifest.version + '.zip'))
+      .pipe(zip('PT-' + manifest.version + '.zip'))
       .pipe(gulp.dest('dist'));
 }
 
 export const build = gulp.series(
     lint,
-    chromeManifest,
+    /*chromeManifest,*/
     gulp.parallel(html, images, extras),
-    size
+    sizeTask
   );
 export default gulp.series(clean, build);
